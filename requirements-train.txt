@@ -1,0 +1,8 @@
+# 氣象主權 AI — M2 Mac 訓練用依賴
+# 安裝：pip install -r requirements-train.txt
+# 需先安裝基礎依賴：pip install -r requirements.txt
+
+# Apple MLX（M1/M2/M3 專用）
+# [train] 才包含 LoRA 微調功能
+mlx>=0.24.0
+mlx-lm[train]>=0.21.0

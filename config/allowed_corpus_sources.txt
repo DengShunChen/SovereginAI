@@ -1,0 +1,54 @@
+# 允許納入語料之來源標識（每行一個，用於前處理過濾）
+# 僅保留台灣／繁體中文官方與社群來源，避免中國大陸或簡體中文污染語料
+# 若此檔存在且 preprocess.py 未加 --no-allowed-sources，則只保留下列 source 之紀錄
+#
+# 官方 CWA（API 資料集 ID）
+CWA
+cwa.gov.tw
+F-C0044-001
+F-C0032-001
+F-C0032-003_006
+W-C0033-001
+W-C0033-002
+W-C0033-003
+W-C0033-004
+W-C0033-005
+W-C0034-001
+W-C0034-005
+E-A0014-001
+E-A0015-001
+E-A0016-001
+F-A0021-001
+F-A0085-002
+F-A0085-004
+A-B0062-001
+A-B0063-001
+#
+# 官網知識與天文
+cwa_encyclopedia
+cwa_typhoon_faq
+cwa_astronomy_faq
+cwa_climate_faq
+cwa_sea_faq
+cwa_popular_science
+cwa_knowledge
+#
+# 官方社群（報天氣等）
+facebook_cwa
+報天氣
+youtube_cwa
+#
+# 論壇（經網路查證之台灣／繁體來源）
+ptt_ty_research
+ptt_weather
+ptt.cc
+twtybbs
+#
+# 學術與技術文獻（可信任來源）
+academic_thesis
+academic_abstract
+cwa_tech_report
+tech_report
+data_gov_tw
+#
+# 可依需要新增，例如：媒體授權、學校計畫等

@@ -1,0 +1,45 @@
+{
+  "description": "泛化能力測試用 prompt（非氣象領域），用以確認微調後模型基礎能力未退化",
+  "prompts": [
+    {
+      "id": "general_1",
+      "category": "general_knowledge",
+      "prompt": "請簡短說明什麼是光合作用。"
+    },
+    {
+      "id": "general_2",
+      "category": "general_knowledge",
+      "prompt": "「守株待兔」這個成語的意思是什麼？"
+    },
+    {
+      "id": "reasoning_1",
+      "category": "math_reasoning",
+      "prompt": "若一個蘋果 5 元，小明買了 3 個蘋果，請問總共要付多少錢？請簡短回答。"
+    },
+    {
+      "id": "reasoning_2",
+      "category": "math_reasoning",
+      "prompt": "一支鉛筆和一本筆記本共 35 元，鉛筆比筆記本貴 5 元，筆記本多少元？"
+    },
+    {
+      "id": "common_sense_1",
+      "category": "common_sense",
+      "prompt": "為什麼要洗手？請用一句話說明。"
+    },
+    {
+      "id": "common_sense_2",
+      "category": "common_sense",
+      "prompt": "台灣的首都城市是哪裡？"
+    },
+    {
+      "id": "coding_1",
+      "category": "coding",
+      "prompt": "請用 Python 寫一個函數，輸入兩個數字，回傳較大的那個。"
+    },
+    {
+      "id": "general_3",
+      "category": "general_knowledge",
+      "prompt": "牛頓三大運動定律分別是什麼？請簡短列出。"
+    }
+  ]
+}

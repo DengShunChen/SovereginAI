@@ -1,0 +1,57 @@
+{
+  "description": "定量評估用 prompt，含預期答案以供計算 EM/contains 準確率",
+  "prompts": [
+    {
+      "id": "math_1",
+      "category": "math",
+      "prompt": "若一個蘋果 5 元，小明買了 3 個蘋果，請問總共要付多少錢？請只回答數字。",
+      "expected": "15",
+      "match_type": "contains_number"
+    },
+    {
+      "id": "math_2",
+      "category": "math",
+      "prompt": "一支鉛筆和一本筆記本共 35 元，鉛筆比筆記本貴 5 元，筆記本多少元？請只回答數字。",
+      "expected": "15",
+      "match_type": "contains_number"
+    },
+    {
+      "id": "fact_1",
+      "category": "factual",
+      "prompt": "台灣的首都城市是哪裡？請只回答城市名稱。",
+      "expected": ["台北", "臺北"],
+      "match_type": "contains_any"
+    },
+    {
+      "id": "fact_2",
+      "category": "factual",
+      "prompt": "牛頓第一定律又稱為什麼定律？請只回答一個詞。",
+      "expected": ["慣性", "慣性定律"],
+      "match_type": "contains_any"
+    },
+    {
+      "id": "fact_3",
+      "category": "factual",
+      "prompt": "圓周率 π 的近似值（小數點後兩位）是多少？請只回答數字。",
+      "expected": "3.14",
+      "match_type": "contains_number"
+    },
+    {
+      "id": "coding_1",
+      "category": "coding",
+      "prompt": "請用 Python 寫一個函數，輸入兩個數字 a 和 b，回傳較大的那個。",
+      "expected": ["def ", "return "],
+      "match_type": "contains_all"
+    },
+    {
+      "id": "general_1",
+      "category": "general",
+      "prompt": "請簡短說明什麼是光合作用。"
+    },
+    {
+      "id": "general_2",
+      "category": "general",
+      "prompt": "「守株待兔」這個成語的意思是什麼？"
+    }
+  ]
+}

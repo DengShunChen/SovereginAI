@@ -1,0 +1,27 @@
+# 授權與機密
+.env
+config/.env
+*.key
+
+# 語料與產出（可依需求改為納入版控）
+# data/
+
+# 訓練產出（LoRA 適配器等）
+models/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env.local
+
+# macOS / 外接磁碟垃圾檔
+._*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
