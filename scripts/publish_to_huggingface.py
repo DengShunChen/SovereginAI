@@ -12,16 +12,16 @@
 
 範例：
   # 首次發布（完整）
-  python scripts/publish_to_huggingface.py --repo_id YOUR_USERNAME/sovereign-weather-corpus
+  python scripts/publish_to_huggingface.py --repo_id dschen/sovereign-weather-corpus
 
   # 後續只推送新增／變更（增量）
-  python scripts/publish_to_huggingface.py --repo_id YOUR_USERNAME/sovereign-weather-corpus --incremental
+  python scripts/publish_to_huggingface.py --repo_id dschen/sovereign-weather-corpus --incremental
 
   # 若 Hub 上該 dataset 載入需要遠端程式碼（不建議任意 repo 使用）
   python scripts/publish_to_huggingface.py --repo_id ... --incremental --trust-remote-code
 
   # 私人 repo
-  python scripts/publish_to_huggingface.py --repo_id YOUR_USERNAME/sovereign-weather-corpus --private
+  python scripts/publish_to_huggingface.py --repo_id dschen/sovereign-weather-corpus --private
 """
 
 from __future__ import annotations

@@ -89,6 +89,8 @@ python scripts/prepare_training/build_instruction_dataset.py --format plain
 
 可將語料發布到 Hugging Face Hub，供遠端載入或分享。**首次發布**會掃描 `data/corpus/weather` 下所有 `.jsonl` 並上傳；**後續增量**使用 `--incremental` 會從 Hub 載入既有 dataset、合併本地新資料後再 push（以 `date`、`source`、`title` 去重）。
 
+本專案維護者公開的 Models／Datasets 見 [huggingface.co/dschen](https://huggingface.co/dschen)（例如語料集 `dschen/sovereign-weather-corpus`）。
+
 ```bash
 # 安裝依賴（若尚未安裝）
 pip install datasets huggingface_hub
@@ -97,13 +99,13 @@ pip install datasets huggingface_hub
 huggingface-cli login
 
 # 首次發布（完整）
-python scripts/publish_to_huggingface.py --repo_id YOUR_USERNAME/sovereign-weather-corpus
+python scripts/publish_to_huggingface.py --repo_id dschen/sovereign-weather-corpus
 
 # 後續只推送新增／變更（增量）
-python scripts/publish_to_huggingface.py --repo_id YOUR_USERNAME/sovereign-weather-corpus --incremental
+python scripts/publish_to_huggingface.py --repo_id dschen/sovereign-weather-corpus --incremental
 
 # 私人 repo
-python scripts/publish_to_huggingface.py --repo_id YOUR_USERNAME/sovereign-weather-corpus --private
+python scripts/publish_to_huggingface.py --repo_id dschen/sovereign-weather-corpus --private
 ```
 
 每次 push 會產生新 revision，他人可固定版本或使用 `main` 取得最新語料。
