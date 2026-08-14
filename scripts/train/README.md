@@ -1,46 +1,132 @@
-# 氣象主權 AI — M2 Mac 本機訓練
+# 氣象主權 AI — 訓練
 
-本目錄提供在 **Apple Silicon（M2/M3）MacBook Pro** 上微調氣象主權 AI 的腳本與說明。
+兩條路徑，**不要混在同一個 venv**：
 
-## 前置需求
+| 路徑 | 硬體 | 基礎模型 | 腳本 |
+|------|------|----------|------|
+| **CUDA LoRA（主）** | A100 80G × 8 / node | `google/gemma-4-12B-it` | `uv` + `sbatch scripts/train/train_lora_a100.slurm` |
+| MLX LoRA | M2/M3 Mac | Qwen 1.5B / Llama 3.2 1B（4-bit） | `./scripts/train/train_lora_mlx.sh` |
 
-### 1. 語料就緒
+---
 
-確認訓練資料已產生：
+## A100：Gemma 4 12B LoRA
+
+### 1. 語料
 
 ```bash
 python scripts/check_corpus_readiness.py && python scripts/check_training_data.py
 ```
 
-若尚未就緒，執行一鍵流程：
+未就緒：`./scripts/run_collect_and_prepare.sh`
+
+12B LoRA 建議 train ≥ **1000** 筆。`AGENTS.md` 的 ≥ 10 只是 pipeline smoke test。
+
+`plain` / `instruction` / `messages` 都會轉成 chat，且只對 assistant token 算 loss。Gemma 4 的空 thought channel 由訓練腳本直接拼進 prompt，不靠前綴比對。
+
+### 2. 訓練環境（uv，login node 建一次）
+
+**還沒建。** 不要 conda、不要系統 python pip。叢集已有 `uv`（`~/.local/bin/uv`）。
+
+Gemma 4 為 Apache 2.0，不需 gated 授權。Hub 限流時可設 `HF_TOKEN`。
 
 ```bash
-./scripts/run_collect_and_prepare.sh
+# login node，走 ~/.proxy 下載 torch cu124 + transformers/peft
+./scripts/train/setup_uv_env.sh
 ```
 
-### 2. 安裝訓練依賴（MLX）
-
-**注意**：需使用 `[train]` 才包含 LoRA 微調功能。
+等價手動：
 
 ```bash
-pip install "mlx-lm[train]"
+source ~/.proxy
+uv python install 3.12
+uv sync --extra cu124
 ```
 
-或使用專案提供的依賴檔：
+Mac MLX 另開 extra，跟 CUDA 互斥：`uv sync --extra mlx`。
+
+### 3. 開練（Slurm）
+
+這是 Slurm 叢集。下載走 `~/.proxy`（ssh tunnel `localhost:8888` → `proxy.cwa.gov.tw`）。作業裡會自動 source；`:8888` 已開就 reuse，不會被 `ssh -Nf` 撞 port 打死。
+
+```bash
+# 專案根（先有 .venv）
+mkdir -p logs
+sbatch scripts/train/train_lora_a100.slurm
+
+# 短測
+sbatch -p ftest --time=04:00:00 scripts/train/train_lora_a100.slurm
+```
+
+預設：`--partition=normal --gres=gpu:8 --nodes=1 --mem=0`（整節點 8×A100 80G）。log：`logs/gemma4_12b_<jobid>.out`。
+
+已在 GPU 節點上（`srun --pty`）可直接：
+
+```bash
+source ~/.proxy   # 或讓腳本自己 load
+./scripts/train/train_lora_a100.sh
+```
+
+torchrun 前會先 `snapshot_download` 一次，避免 8 rank 同時打 HF。
+
+預設（8 GPU）：
+
+```
+model     google/gemma-4-12B-it
+lora      r=64  alpha=128  q/k/v/o/gate/up/down（語言塔，不含 vision/audio）
+batch     micro=1  accum=1  → global 8
+seq       2048  packing + completion-only
+lr        2e-4 cosine  warmup 3%
+epochs    5
+dtype     bf16 + gradient checkpointing
+out       models/sovereign-weather-lora-gemma4-12b/
+```
+
+環境變數可覆寫：
+
+```bash
+NUM_GPUS=8 BATCH_SIZE=1 GRAD_ACCUM=1 EPOCHS=5 LR=2e-4 \
+MODEL=google/gemma-4-12B-it \
+ADAPTER_DIR=models/sovereign-weather-lora-gemma4-12b \
+./scripts/train/train_lora_a100.sh
+```
+
+單卡 debug：`NUM_GPUS=1 ./scripts/train/train_lora_a100.sh`
+
+格式自檢（login node 可跑，不載入權重）：
+
+```bash
+.venv/bin/python scripts/train/train_lora_sft.py --format-check --max-train-rows 8 --min-train 1
+```
+
+### 4. 推理
+
+```bash
+python3 scripts/train/generate_sft.py \
+  --adapter-path models/sovereign-weather-lora-gemma4-12b \
+  --prompt "請說明焚風現象"
+```
+
+現有 `scripts/evaluate/*` 仍走 MLX，A100 上不要跑那些。
+
+OOM：先砍 `MAX_LENGTH=1024`。12B LoRA + 262K 詞表，micro batch 必須是 1；不要把 `BATCH_SIZE` 拉回 8。
+
+語料太少硬上 31B：改 `MODEL=google/gemma-4-31B-it` 並加 FSDP，這專案不建議當第一槍。
+
+---
+
+## M2 Mac：MLX LoRA（1B–3B）
+
+本機 Apple Silicon 微調。需 `[train]` extra。
 
 ```bash
 pip install -r requirements-train.txt
 ```
-
-### 3. 硬體建議
 
 | 機型 | 建議模型規模 | 批次大小 | 備註 |
 |------|-------------|----------|------|
 | M2 MacBook Pro（8GB） | 0.5B–1.5B | 2 | 使用 4-bit 量化模型 |
 | M2 MacBook Pro（16GB+） | 1.5B–3B | 4 | 可嘗試較大模型 |
 | M3/M3 Pro | 同上或更大 | 4–8 | 訓練速度較快 |
-
-## 訓練方式
 
 ### 方式一：使用腳本（推薦）
 
@@ -87,7 +173,7 @@ python -m mlx_lm lora \
 
 （注意：新版 mlx-lm 使用 `python -m mlx_lm lora`，不再支援 `--lora-layers`）
 
-## 模型選擇
+## 模型選擇（MLX）
 
 ### 氣象主權 AI 支援兩種基礎模型
 
@@ -106,7 +192,7 @@ python -m mlx_lm lora \
 
 更多 MLX 社群模型：[Hugging Face mlx-community](https://huggingface.co/mlx-community)
 
-## 訓練完成後
+## 訓練完成後（MLX）
 
 ### 泛化能力評估（建議）
 
@@ -155,6 +241,18 @@ python scripts/publish_model_to_huggingface.py --repo_id dschen/sovereign-weathe
 
 可在 `config/.env` 設定 `HF_MODEL_REPO=dschen/sovereign-weather-ai` 以省略 `--repo_id`。
 
+A100 Gemma 4 12B 適配器請先指定路徑與基礎模型：
+
+```bash
+python scripts/publish_model_to_huggingface.py \
+  --repo_id dschen/sovereign-weather-ai-gemma4-12b \
+  --adapter_path models/sovereign-weather-lora-gemma4-12b \
+  --model google/gemma-4-12B-it \
+  --mode adapter
+```
+
+（`publish_model_to_huggingface.py` 的 fuse 路徑仍走 MLX；CUDA 權重請用 `--mode adapter`。）
+
 ### 與 Ollama 整合（可選）
 
 可將適配器合併回基礎模型，再匯入 Ollama 使用。詳見 [mlx-examples](https://github.com/ml-explore/mlx-examples)。
@@ -167,15 +265,21 @@ python scripts/publish_model_to_huggingface.py --repo_id dschen/sovereign-weathe
 {"text": "焚風為一種出現在山脈背風面之乾熱風..."}
 ```
 
-此格式與 mlx-lm 預設 SFT 格式相容，無需額外轉換。
+或 instruction：
+
+```json
+{"instruction": "請根據以下資料寫今日天氣概況。", "input": "天氣資料", "output": "..."}
+```
+
+A100 腳本兩種都吃；MLX 預設吃 `{"text": "..."}`。
 
 ## 常見問題
 
-**Q: 訓練時記憶體不足？**  
+**Q: A100 訓練時記憶體不足？**  
+A: `MAX_LENGTH=1024`。12B + 262K 詞表不要把 `BATCH_SIZE` 拉回 8。
+
+**Q: Mac 訓練時記憶體不足？**  
 A: 降低 `--batch-size` 至 1，或改用更小的模型（如 0.5B）。
 
-**Q: 訓練速度很慢？**  
-A: M2 訓練 500 迭代約需數分鐘至十多分鐘，屬正常。可減少 `--iters` 先驗證流程。
-
 **Q: 語料只有數百筆夠嗎？**  
-A: 可用於驗證流程與初步測試。若要較佳效果，建議累積至 1000+ 筆（每日執行 `run_collect_and_prepare.sh` 可逐步擴充）。
+A: Mac 1B 可驗證流程。12B 建議 ≥ 1000 筆（每日執行 `run_collect_and_prepare.sh`）。

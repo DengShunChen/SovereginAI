@@ -4,7 +4,8 @@
 
 首次發布：掃描 data/corpus/weather 下所有 .jsonl，建立 Dataset 並 push。
 後續增量：--incremental 會從 Hub 載入既有 dataset，合併本地新資料後再 push，
-         以 (date, source, title) 去重，避免重複列。
+         以 content hash 去重（避免靜態 FAQ 因抓取日不同而膨脹）。
+完整覆蓋：--rewrite 不載入 Hub 舊資料，直接用本地去重後集合覆蓋。
 
 使用前請先登入：
   huggingface-cli login
@@ -17,6 +18,9 @@
   # 後續只推送新增／變更（增量）
   python scripts/publish_to_huggingface.py --repo_id dschen/sovereign-weather-corpus --incremental
 
+  # 以本地去重結果完整覆蓋 Hub（清掉舊的日期膨脹重複）
+  python scripts/publish_to_huggingface.py --repo_id dschen/sovereign-weather-corpus --rewrite
+
   # 若 Hub 上該 dataset 載入需要遠端程式碼（不建議任意 repo 使用）
   python scripts/publish_to_huggingface.py --repo_id ... --incremental --trust-remote-code
 
@@ -27,6 +31,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -82,15 +87,20 @@ def collect_jsonl_records(corpus_dir: Path) -> list[dict]:
     return records
 
 
-def dedupe_by_key(records: list[dict], keys: tuple[str, ...]) -> list[dict]:
-    """依 keys 去重，保留第一次出現的紀錄。"""
-    seen: set[tuple] = set()
+def content_hash(record: dict) -> str:
+    c = record.get("content") or record.get("text") or ""
+    return hashlib.sha256(c.encode("utf-8")).hexdigest()
+
+
+def dedupe_by_content(records: list[dict]) -> list[dict]:
+    """依 content hash 去重，保留第一次出現的紀錄。"""
+    seen: set[str] = set()
     out = []
     for r in records:
-        t = tuple(r.get(k) for k in keys)
-        if t in seen:
+        h = content_hash(r)
+        if h in seen:
             continue
-        seen.add(t)
+        seen.add(h)
         out.append(r)
     return out
 
@@ -119,7 +129,12 @@ def main() -> None:
     parser.add_argument(
         "--incremental",
         action="store_true",
-        help="增量模式：從 Hub 載入既有 dataset，合併本地資料後再 push（以 date, source, title 去重）",
+        help="增量模式：從 Hub 載入既有 dataset，合併本地資料後再 push（以 content hash 去重）",
+    )
+    parser.add_argument(
+        "--rewrite",
+        action="store_true",
+        help="完整覆蓋：不載入 Hub 舊資料，以本地 content hash 去重後的集合覆蓋 Hub",
     )
     parser.add_argument(
         "--trust-remote-code",
@@ -134,6 +149,10 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    if args.incremental and args.rewrite:
+        print("不可同時指定 --incremental 與 --rewrite", file=sys.stderr)
+        sys.exit(1)
+
     try:
         from datasets import Dataset, load_dataset
     except ImportError:
@@ -144,7 +163,11 @@ def main() -> None:
     local_records = collect_jsonl_records(corpus_dir)
     print(f"本地語料: {len(local_records)} 筆（來自 {corpus_dir}）")
 
-    if args.incremental:
+    if args.rewrite:
+        records_to_push = dedupe_by_content(local_records)
+        print(f"rewrite: 本地去重後 {len(records_to_push)} 筆（將覆蓋 Hub）")
+        default_msg = "Full rewrite (content-hash dedupe)"
+    elif args.incremental:
         try:
             existing = load_dataset(
                 args.repo_id,
@@ -160,21 +183,22 @@ def main() -> None:
             else:
                 ds_old = existing
             old_records = [ds_old[i] for i in range(len(ds_old))]
-            # 合併：舊 + 本地，再以 (date, source, title) 去重（保留第一次出現 = 舊的優先，新資料補在後）
-            keys = ("date", "source", "title")
+            # 合併：舊 + 本地，再以 content hash 去重（舊的優先，新資料補在後）
             combined = old_records + local_records
-            merged = dedupe_by_key(combined, keys)
-            # 若合併後筆數沒變多，可能是本地沒新資料
-            new_count = len(merged) - len(old_records)
-            print(f"既有: {len(old_records)} 筆，合併去重後: {len(merged)} 筆（+{new_count} 新）")
+            merged = dedupe_by_content(combined)
+            new_count = len(merged) - len(dedupe_by_content(old_records))
+            print(
+                f"既有: {len(old_records)} 筆，合併去重後: {len(merged)} 筆"
+                f"（約 +{max(0, new_count)} 新）"
+            )
             records_to_push = merged
             default_msg = "Incremental update"
         except Exception as e:
             print(f"無法載入既有 dataset ({args.repo_id})，改為完整上傳: {e}", file=sys.stderr)
-            records_to_push = local_records
+            records_to_push = dedupe_by_content(local_records)
             default_msg = "Full upload (incremental load failed)"
     else:
-        records_to_push = local_records
+        records_to_push = dedupe_by_content(local_records)
         default_msg = "Full upload"
 
     if not records_to_push:

@@ -113,7 +113,7 @@ python scripts/publish_to_huggingface.py --repo_id dschen/sovereign-weather-corp
 ## 下一步
 
 1. **每日定時擷取**：以 cron 或 `schedule` 每日執行 `./scripts/run_collect_and_prepare.sh`（或僅執行 `fetch_weather_summary.py`、`fetch_weekly_forecast.py`），累積更多語料。每次擷取會產出多筆縣市級可讀語料，長期可顯著增加官方語料量。
-2. **接訓練程式**：從 `data/processed/for_training/train.jsonl`、`valid.jsonl`、`test.jsonl` 讀取；`plain` 格式每行為 `{"text": "..."}`，`instruction` 格式為 `instruction`/`input`/`output`。可搭配 Hugging Face `datasets` 或自訂 DataLoader。**M2 Mac 本機 LoRA 微調**：見 `scripts/train/README.md`，使用 Apple MLX 執行 `./scripts/train/train_lora_mlx.sh`。
+2. **接訓練程式**：從 `data/processed/for_training/train.jsonl`、`valid.jsonl`、`test.jsonl` 讀取；`plain` 格式每行為 `{"text": "..."}`，`instruction` 格式為 `instruction`/`input`/`output`。**Slurm A100 80G × 8、Gemma 4 12B LoRA**：`sbatch scripts/train/train_lora_a100.slurm`（下載走 `~/.proxy`，見 `scripts/train/README.md`）。**M2 Mac 本機 LoRA**：`./scripts/train/train_lora_mlx.sh`。
 3. **擴充語料**：學術／技術語料**以 CWA 出版品為主**（見 `data/corpus/weather/academic/tech_reports/README_CWA.md`）：官網表格建議手動匯出為 CSV，再執行 `python scripts/academic/import_cwa_publications_csv.py your.csv`；或執行 `fetch_cwa_publications.py` 嘗試自動擷取。勿使用自行假造語料。記得在 `config/allowed_corpus_sources.txt` 加入 `cwa_tech_report` 等來源，前處理才會納入。
 
 ## 第二～四階段

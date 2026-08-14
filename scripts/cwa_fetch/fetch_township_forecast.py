@@ -1,13 +1,12 @@
 """
-擷取中央氣象署「一週天氣預報」F-C0032-003_006 或單點預報 F-C0032-001，
-寫入 data/corpus/weather/official/daily/ 為 JSONL。
-需設定環境變數 CWA_API_AUTH_KEY（或 .env）。
+擷取中央氣象署鄉鎮天氣預報 F-D0047。
+優先抓全臺資料集（091 未來 2 天、093 未來 1 週），寫入
+data/corpus/weather/official/daily/ 為 JSONL，按鄉鎮 × 預報日拆筆。
+需設定 CWA_API_AUTH_KEY。
 """
 from __future__ import annotations
 
-import json
 import os
-import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -35,14 +34,17 @@ from scripts.cwa_fetch.utils import (
     update_manifest,
 )
 
-# 一週天氣預報（縣市／分區）
-DATASET_WEEKLY = "F-C0032-003_006"
-# 單點預報（可指定 locationName）
-DATASET_SINGLE = "F-C0032-001"
 BASE_URL = "https://opendata.cwa.gov.tw/api/v1/rest/datastore"
 FILEAPI_BASE = "https://opendata.cwa.gov.tw/fileapi/v1/opendataapi"
 OUTPUT_DIR = REPO_ROOT / "data" / "corpus" / "weather" / "official" / "daily"
 REQUEST_INTERVAL_SEC = 1.5
+SOURCE_TAG = "F-D0047"
+
+# 全臺一次取回，避免打 22 縣市 × 2
+DATASETS = (
+    ("F-D0047-093", "鄉鎮一週預報"),
+    ("F-D0047-091", "鄉鎮二日預報"),
+)
 
 
 def get_auth_key() -> str:
@@ -61,17 +63,14 @@ def _request(url: str, params: dict, verify: bool) -> requests.Response:
         url,
         params=params,
         headers={"accept": "application/json"},
-        timeout=30,
+        timeout=120,
         verify=verify,
     )
 
 
-def fetch_json(auth_key: str, dataset_id: str, **params: str) -> dict | None:
-    """擷取單一資料集；若 rest 回 404 則改試 fileapi。回傳 None 表示無法取得。"""
-    q = {"Authorization": auth_key, "format": "JSON", **params}
+def fetch_json(auth_key: str, dataset_id: str) -> dict | None:
+    q = {"Authorization": auth_key, "format": "JSON"}
     verify = ssl_verify()
-
-    # 1. rest/datastore
     url_rest = f"{BASE_URL}/{dataset_id}"
     for attempt in range(2):
         try:
@@ -85,7 +84,6 @@ def fetch_json(auth_key: str, dataset_id: str, **params: str) -> dict | None:
                 time.sleep(REQUEST_INTERVAL_SEC)
         break
 
-    # 2. fileapi（一週預報 404 時備援）
     url_file = f"{FILEAPI_BASE}/{dataset_id}"
     for attempt in range(2):
         try:
@@ -100,57 +98,25 @@ def fetch_json(auth_key: str, dataset_id: str, **params: str) -> dict | None:
             if attempt == 0:
                 time.sleep(REQUEST_INTERVAL_SEC)
         break
-
     return None
-
-
-def extract_forecast_text(data: dict, source: str, fallback_date: str) -> list[tuple[str, str, str]]:
-    """從預報 API 回傳抽出 (標題, 內容, 預報生效日) 列表，按日拆筆。"""
-    items = extract_forecasts_by_day(
-        data, title_prefix="一週預報", fallback_date=fallback_date
-    )
-    if items:
-        return items
-
-    # 備援：搜尋長字串
-    out: list[tuple[str, str, str]] = []
-    def collect(obj: dict | list, depth: int = 0) -> None:
-        if depth > 8:
-            return
-        if isinstance(obj, dict):
-            for k, v in obj.items():
-                if isinstance(v, str) and len(v) > 30 and re.search(r"[\u4e00-\u9fff]", v):
-                    out.append((k, v.strip(), fallback_date))
-                else:
-                    collect(v, depth + 1)
-        elif isinstance(obj, list):
-            for v in obj:
-                collect(v, depth + 1)
-    collect(data)
-    return out
 
 
 def main() -> None:
     auth_key = get_auth_key()
     now = datetime.now(timezone.utc)
     date_str = now.strftime("%Y-%m-%d")
-    year, month = now.year, now.month
-    jsonl_path = jsonl_path_for_month(OUTPUT_DIR, "official_weekly", year, month)
+    jsonl_path = jsonl_path_for_month(OUTPUT_DIR, "official_township", now.year, now.month)
     manifest_path = OUTPUT_DIR / "manifest.json"
 
     total = 0
     dates_seen: list[str] = []
-    for dataset_id, source_label in [
-        (DATASET_WEEKLY, "F-C0032-003_006"),
-        (DATASET_SINGLE, "F-C0032-001"),
-    ]:
+    for dataset_id, label in DATASETS:
         try:
             data = fetch_json(auth_key, dataset_id)
         except Exception as e:
             print(f"略過 {dataset_id}: {e}", file=sys.stderr)
             time.sleep(REQUEST_INTERVAL_SEC)
             continue
-
         if data is None:
             print(f"略過 {dataset_id}: rest 與 fileapi 皆無法取得", file=sys.stderr)
             time.sleep(REQUEST_INTERVAL_SEC)
@@ -160,21 +126,24 @@ def main() -> None:
             time.sleep(REQUEST_INTERVAL_SEC)
             continue
 
-        items = extract_forecast_text(data, source_label, date_str)
+        items = extract_forecasts_by_day(data, title_prefix=label, fallback_date=date_str)
         written = 0
         for title, content, rec_date in items:
             if not content or len(content) < 5:
                 continue
-            record = {
-                "title": title[:200] if len(title) > 200 else title,
-                "content": content,
-                "date": rec_date,
-                "source": source_label,
-                "type": "weekly_forecast",
-            }
-            append_record(jsonl_path, record)
+            append_record(
+                jsonl_path,
+                {
+                    "title": title[:200],
+                    "content": content,
+                    "date": rec_date,
+                    "source": SOURCE_TAG,
+                    "type": "township_forecast",
+                },
+            )
             dates_seen.append(rec_date)
             written += 1
+        print(f"  {dataset_id}: {written} 筆")
         total += written
         time.sleep(REQUEST_INTERVAL_SEC)
 

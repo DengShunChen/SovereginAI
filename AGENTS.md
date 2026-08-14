@@ -25,6 +25,7 @@ python scripts/check_corpus_readiness.py && python scripts/check_training_data.p
 | **訓練切分** | 產出 train/valid/test.jsonl | `data/processed/for_training/` 下有 `train.jsonl`、`valid.jsonl`、`test.jsonl` | `python scripts/check_training_data.py` |
 | **語料就緒** | 滿足氣象主權 AI 訓練門檻 | 語料就緒檢查 6/6 項通過 | `python scripts/check_corpus_readiness.py` |
 | **發布（選用）** | 推送到 Hugging Face | 依需手動執行 | `python scripts/publish_to_huggingface.py` |
+| **A100 訓練（Gemma 4）** | 8×A100 LoRA 微調 Gemma 4 12B | `models/sovereign-weather-lora-gemma4-12b/` 有 adapter | `sbatch scripts/train/train_lora_a100.slurm` |
 
 ---
 
@@ -77,6 +78,15 @@ python scripts/check_corpus_readiness.py && python scripts/check_training_data.p
 - **腳本**：`scripts/publish_to_huggingface.py`
 - **完成條件**：依需求手動執行，無強制門檻
 
+### 8. A100 訓練 Agent（Gemma 4 12B）
+
+- **腳本**：`scripts/train/train_lora_a100.slurm`、`scripts/train/train_lora_a100.sh`、`scripts/train/train_lora_sft.py`
+- **硬體**：Slurm 單節點 `--gres=gpu:8`（A100 80G × 8；CUDA，與 Mac MLX 路徑分開）
+- **下載**：compute node source `~/.proxy`（localhost:8888）；HF 權重先 prefetch 再 torchrun
+- **完成條件**：`models/sovereign-weather-lora-gemma4-12b/` 存在 LoRA adapter
+- **建議門檻**：train ≥ 1000 筆再練 12B（上面 6 項語料檢查仍是 pipeline smoke test，≥ 10 不夠）
+- **推理**：`python scripts/train/generate_sft.py --prompt "請說明焚風現象"`
+
 ---
 
 ## 建議流程
@@ -84,4 +94,5 @@ python scripts/check_corpus_readiness.py && python scripts/check_training_data.p
 1. 先執行：`./scripts/run_collect_and_prepare.sh`（官方擷取 → 前處理 → 切分）
 2. 若需學術／社群：執行對應擷取腳本，再執行 `preprocess.py` → `build_instruction_dataset.py`
 3. 定期執行：`python scripts/check_corpus_readiness.py` 檢視各 Agent 完成狀態
-4. 若要自動發布至 Hugging Face Hub：在 `config/.env` 設定 `HF_REPO_ID=使用者名/repo 名稱`，一鍵流程完成後會自動 push（增量模式）
+4. 語料就緒後：`sbatch scripts/train/train_lora_a100.slurm`（Gemma 4 12B LoRA；下載走 `~/.proxy`）
+5. 若要自動發布至 Hugging Face Hub：在 `config/.env` 設定 `HF_REPO_ID=使用者名/repo 名稱`，一鍵流程完成後會自動 push（增量模式）

@@ -162,6 +162,28 @@ def normalize_mainland_to_tw(content: str, replace_list: list[tuple[str, str]]) 
     return content
 
 
+UI_JUNK_MARKERS = (
+    "該使用哪一版本的瀏覽器",
+    "建議您使用較新版本的瀏覽器",
+    "網頁暫存快取",
+    "設定每次開啟瀏覽器",
+    "Home Page（首頁）",
+    "新版找不到",
+    "新版 V8 「天氣」",
+    "Safari】→【清除瀏覽",
+    "點選【儲存空間】",
+    "字級大小",
+    "網站建議使用",
+    "自動更新功能",
+    "清除您電腦裡的網頁暫存",
+)
+
+
+def is_ui_junk(record: dict) -> bool:
+    blob = f"{record.get('title') or ''}\n{record.get('content') or record.get('text') or ''}"
+    return any(m in blob for m in UI_JUNK_MARKERS)
+
+
 def preprocess(
     records: list[dict],
     *,
@@ -177,6 +199,7 @@ def preprocess(
     max_mainland_distinct: int = 2,
     max_mainland_ratio: float = 0.02,
     normalize_mainland_to_tw_list: list[tuple[str, str]] | None = None,
+    drop_ui_junk: bool = False,
 ) -> list[dict]:
     out: list[dict] = []
     seen: set[str] = set()
@@ -190,6 +213,8 @@ def preprocess(
         if types and (r.get("type") or "") not in types:
             continue
         if sources and (r.get("source") or "") not in sources:
+            continue
+        if drop_ui_junk and is_ui_junk(r):
             continue
         if exclude_simplified and is_likely_simplified_chinese(content):
             continue
@@ -272,6 +297,11 @@ def main() -> None:
         default=MAINLAND_TO_TW_PATH,
         help="中國用語→台灣用語替換表（格式：中國用語\\t台灣用語）",
     )
+    ap.add_argument(
+        "--drop-ui-junk",
+        action="store_true",
+        help="排除官網操作 FAQ（瀏覽器設定、新版選單路徑等）",
+    )
     ap.add_argument("--vocab-stats", action="store_true", help="輸出詞表出現次數統計")
     args = ap.parse_args()
 
@@ -297,6 +327,7 @@ def main() -> None:
         max_mainland_distinct=args.max_mainland_distinct,
         max_mainland_ratio=args.max_mainland_ratio,
         normalize_mainland_to_tw_list=normalize_list,
+        drop_ui_junk=args.drop_ui_junk,
     )
 
     args.out.parent.mkdir(parents=True, exist_ok=True)

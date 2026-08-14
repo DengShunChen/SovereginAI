@@ -3,11 +3,14 @@
 config/.env
 *.key
 
-# 語料與產出（可依需求改為納入版控）
-# data/
+# 語料與產出（以 HF dataset 為累積來源，不入版控）
+data/
 
 # 訓練產出（LoRA 適配器等）
 models/
+
+# Slurm 作業 log
+logs/
 
 # Python
 __pycache__/

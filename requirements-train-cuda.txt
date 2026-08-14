@@ -1,0 +1,6 @@
+# 已改用 uv。請勿再 pip install 本檔。
+#
+#   ./scripts/train/setup_uv_env.sh
+#   → uv sync --extra cu124（torch 走 https://download.pytorch.org/whl/cu124）
+#
+# 見 pyproject.toml 的 [project.optional-dependencies] cu124。

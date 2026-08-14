@@ -92,20 +92,53 @@ def fetch_dataset(auth_key: str, dataset_id: str, verify: bool) -> dict | None:
     return None
 
 
-def extract_text_from_json(obj: object, min_len: int = 15) -> list[str]:
-    """遞迴從 JSON 抽出含中文的長字串。"""
+METADATA_KEYS = {
+    "datasetdescription",
+    "resourcedescription",
+    "description",
+    "datasetinfo",
+    "note",
+    "datasource",
+    "fields",
+    "fielddescription",
+    "datasetid",
+    "datasetname",
+    "dataset",
+}
+CATALOG_MARKERS = (
+    "等時刻資料",
+    "資料集說明",
+    "未來1個月潮汐預報，鄉鎮",
+    "含有日出日沒",
+    "含有月出月沒",
+    "鄉鎮、大潮小潮、滿潮乾潮",
+)
+
+
+def extract_text_from_json(obj: object, min_len: int = 15, key: str = "") -> list[str]:
+    """遞迴從 JSON 抽出含中文的長字串，略過 dataset metadata 欄位。"""
+    if key.lower() in METADATA_KEYS:
+        return []
     out: list[str] = []
     if isinstance(obj, dict):
         for k, v in obj.items():
-            if isinstance(v, str):
-                if len(v) >= min_len and re.search(r"[\u4e00-\u9fff]", v):
-                    out.append(v.strip())
-            else:
-                out.extend(extract_text_from_json(v, min_len))
+            out.extend(extract_text_from_json(v, min_len, str(k)))
     elif isinstance(obj, list):
         for item in obj:
-            out.extend(extract_text_from_json(item, min_len))
+            out.extend(extract_text_from_json(item, min_len, key))
+    elif isinstance(obj, str):
+        if len(obj) >= min_len and re.search(r"[\u4e00-\u9fff]", obj):
+            out.append(obj.strip())
     return out
+
+
+def is_catalog_blurb(text: str) -> bool:
+    if any(m in text for m in CATALOG_MARKERS):
+        return True
+    # 只有一句資料集標題、沒有實際觀測／預報數值
+    if text.count("\n") == 0 and ("資料" in text or "預報" in text) and len(text) < 80:
+        return True
+    return False
 
 
 def json_to_readable_content(data: dict) -> str:
@@ -117,7 +150,7 @@ def json_to_readable_content(data: dict) -> str:
         if p not in seen and len(p) >= 10:
             seen.add(p)
             unique.append(p)
-    return "\n".join(unique[:50]) if unique else json.dumps(data, ensure_ascii=False)[:3000]
+    return "\n".join(unique[:50]) if unique else ""
 
 
 def main() -> None:
@@ -141,7 +174,7 @@ def main() -> None:
             continue
 
         content = json_to_readable_content(data)
-        if not content or len(content) < 20:
+        if not content or len(content) < 20 or is_catalog_blurb(content):
             continue
 
         jsonl_path = jsonl_path_for_month(output_dir, prefix, year, month)
